@@ -36,6 +36,6 @@ is_current_user_sudoer() {
 
 
 if ! is_current_user_sudoer; then
-    sed -i "s/che-host/che-host.eclipse-che.svc/g" /home/user/traefik/traefik.toml
+    sed -i "s/che-host/che-host.eclipse-che.svc/g" /root/traefik/traefik.toml
 fi
 exec "$@"

@@ -1,0 +1,71 @@
+FROM adoptopenjdk/openjdk11:aarch64-centos-jre-11.0.10_9
+
+EXPOSE 4403 8080 8000 9876 22
+
+RUN yum -y install epel-release && \
+    yum -y update && \
+    yum -y install  \
+           rh-maven35 \
+           plexus-classworlds \
+           rh-nodejs8 \
+           gcc-c++ \
+           gcc \
+           glibc-devel \
+           bzip2 \
+           make \
+           golang \
+           maven \
+           nodejs \
+           wget \
+           unzip
+
+ENV TOMCAT_VERSION=8.5.23 YARN_VERSION=1.15.2
+
+RUN mkdir $HOME/.m2 && \
+   wget -O  /root/tomcat8.zip "https://oss.sonatype.org/content/repositories/releases/org/eclipse/che/lib/che-tomcat8-slf4j-logback/6.11.0/che-tomcat8-slf4j-logback-6.11.0.zip" ;\
+   unzip   /root/tomcat8.zip -d /root/tomcat8;\
+   rm /root/tomcat8.zip;\
+   mkdir /root/tomcat8/webapps;\
+   sed -i -- 's/autoDeploy=\"false\"/autoDeploy=\"true\"/g' /root/tomcat8/conf/server.xml; \
+   sed -i 's/<Context>/<Context reloadable=\"true\">/g' /root/tomcat8/conf/context.xml; \
+   echo "export MAVEN_OPTS=\$JAVA_OPTS" >> /root/.bashrc
+
+RUN wget -qO- https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --import \
+    && curl -fsSLO --compressed "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$YARN_VERSION.tar.gz" \
+    && curl -fsSLO --compressed "https://yarnpkg.com/downloads/$YARN_VERSION/yarn-v$YARN_VERSION.tar.gz.asc" \
+    && gpg --batch --verify yarn-v$YARN_VERSION.tar.gz.asc yarn-v$YARN_VERSION.tar.gz \
+    && mkdir -p /opt \
+    && tar -xzf yarn-v$YARN_VERSION.tar.gz -C /opt/ \
+    && ln -s /opt/yarn-v$YARN_VERSION/bin/yarn /usr/local/bin/yarn \
+    && ln -s /opt/yarn-v$YARN_VERSION/bin/yarnpkg /usr/local/bin/yarnpkg \
+    && rm yarn-v$YARN_VERSION.tar.gz.asc yarn-v$YARN_VERSION.tar.gz
+
+
+ENV LD_LIBRARY_PATH=/opt/rh/rh-nodejs8/root/usr/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}} \
+ PYTHONPATH=/opt/rh/rh-nodejs8/root/usr/lib/python2.7/site-packages${PYTHONPATH:+:${PYTHONPATH}} \
+ MANPATH=/opt/rh/rh-nodejs8/root/usr/share/man:$MANPATH \
+ TOMCAT_HOME=/home/user/tomcat8 \
+ TERM=xterm  \
+ M2_HOME=/opt/rh/rh-maven35/root/usr/share/maven \
+ GOPATH=$HOME/go \
+ NODEJS_VERSION=6 \
+ NPM_RUN=start \
+ NPM_CONFIG_PREFIX=$HOME/.npm-global
+
+ENV PATH=$HOME/node_modules/.bin/:$HOME/.npm-global/bin/:$GOPATH/bin:$M2_HOME/bin:/opt/rh/rh-nodejs8/root/usr/bin:/usr/local/go/bin:$PATH
+
+RUN mkdir /root/traefik \
+    && wget -O /root/traefik/traefik "https://github.com/traefik/traefik/releases/download/v1.4.3/traefik_linux-arm64"\
+    && chmod +x /root/traefik/traefik
+COPY traefik.toml /root/traefik/
+ADD entrypoint.sh /root/entrypoint.sh
+RUN mkdir /var/run/sshd && \
+    ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N '' && \
+    ssh-keygen -t rsa -f /etc/ssh/ssh_host_ecdsa_key -N '' && \
+    ssh-keygen -t rsa -f /etc/ssh/ssh_host_ed25519_key -N '' && \
+    npm install -g typescript@2.5.3 typescript-language-server@0.1.4 && \
+    chgrp -R 0 ~ && \
+    chmod -R g+rwX ~
+WORKDIR /projects
+ENTRYPOINT ["/root/entrypoint.sh"]
+CMD tail -f /dev/null
